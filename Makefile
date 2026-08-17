@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test docs docs-serve
+.PHONY: setup lint lock-check typecheck test docs docs-serve
 
 setup:
 	uv sync --frozen
@@ -7,6 +7,9 @@ setup:
 lint:
 	uv run ruff format --check .
 	uv run ruff check .
+
+lock-check:
+	uv lock --check
 
 typecheck:
 	uv run mypy src tests

@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           # A pull request opened with the default GITHUB_TOKEN triggers no CI runs.
           # Adding a RELEASE_PLEASE_TOKEN repository secret (a fine-grained PAT with
@@ -20,3 +21,29 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # release-please writes the new version into pyproject.toml and leaves
+      # uv.lock recording the previous one. `uv sync --frozen` tolerates that
+      # difference, so the drift would otherwise reach main and fail the
+      # lockfile check there. Bringing the lockfile into step on the release
+      # branch keeps the release a single merge.
+      - if: ${{ steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+      - if: ${{ steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr != '' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.11"
+      - if: ${{ steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr != '' }}
+        name: sync the lockfile with the released version
+        run: |
+          uv lock
+          if git diff --quiet -- uv.lock; then
+            echo "the lockfile already names the released version"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: sync the lockfile with the released version" -- uv.lock
+          git push
