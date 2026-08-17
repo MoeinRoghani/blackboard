@@ -24,7 +24,7 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/MoeinRoghani/blackboard"
+Repository = "https://github.com/MoeinRoghani/blackboardx"
 
 [dependency-groups]
 dev = [
