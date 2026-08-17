@@ -5,8 +5,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: pyblackboard version
-      description: The installed version, from `pip show pyblackboard`
+      label: blackboardx version
+      description: The installed version, from `pip show blackboardx`
     validations:
       required: true
   - type: input

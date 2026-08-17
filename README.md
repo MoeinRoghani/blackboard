@@ -1,13 +1,13 @@
-# pyblackboard
+# blackboardx
 
-A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board, and the control component's write path and notification dispatch; an application adds its agents, the content they write, and its rules.
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board, and the control component's write path and notification dispatch; an application adds its agents, the content they write, and its rules.
 
-The distribution name is `pyblackboard`; the import name is `blackboard`.
+The distribution name is `blackboardx`; the import name is `blackboard`.
 
 ## Install
 
 ```
-pip install pyblackboard
+pip install blackboardx
 ```
 
 ## The board
