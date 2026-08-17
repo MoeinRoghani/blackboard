@@ -2,10 +2,11 @@
 
 The library supplies the board, the shared structure through which
 independent agents contribute to one result, and the control component's
-write path and notification dispatch: a write made through it passes
-admission before the board sequences it, and an admitted register write
-notifies every other registered agent. The public surface is the set of
-names in ``__all__``; every other name is internal.
+write path, notification dispatch, and run closure: a write made through
+it passes admission before the board sequences it, an admitted register
+write notifies every other registered agent, and the run closes in one of
+four recorded states. The public surface is the set of names in
+``__all__``; every other name is internal.
 """
 
 from blackboard._board import (
@@ -25,14 +26,20 @@ from blackboard._board import (
 )
 from blackboard._clock import Clock, ManualClock, ScheduledCall, SystemClock
 from blackboard._control import (
+    Aborted,
     Accept,
     Accepted,
     AdmissionRule,
     Agent,
     AuditEvent,
     BoardReader,
+    BudgetExhausted,
+    BudgetKind,
+    BudgetReached,
+    Complete,
     DeadlineExtended,
     DuplicateAgentError,
+    FinishedWithFailures,
     Notification,
     NotificationAcknowledged,
     NotificationDispatched,
@@ -44,6 +51,12 @@ from blackboard._control import (
     Reject,
     Rejected,
     RejectionCause,
+    RunBudgets,
+    RunClosed,
+    RunClosedError,
+    RunOutcome,
+    TerminationDecision,
+    TerminationPredicate,
     UnknownNotificationError,
     WakeCapReached,
     WriteAccepted,
@@ -51,6 +64,7 @@ from blackboard._control import (
 )
 
 __all__ = [
+    "Aborted",
     "Accept",
     "Accepted",
     "AdmissionRule",
@@ -60,12 +74,17 @@ __all__ = [
     "Board",
     "BoardChange",
     "BoardReader",
+    "BudgetExhausted",
+    "BudgetKind",
+    "BudgetReached",
     "Clock",
+    "Complete",
     "Conflict",
     "Contribution",
     "DeadlineExtended",
     "DuplicateAgentError",
     "DuplicateRegionError",
+    "FinishedWithFailures",
     "Level",
     "ManualClock",
     "Notification",
@@ -82,8 +101,14 @@ __all__ = [
     "Reject",
     "Rejected",
     "RejectionCause",
+    "RunBudgets",
+    "RunClosed",
+    "RunClosedError",
+    "RunOutcome",
     "ScheduledCall",
     "SystemClock",
+    "TerminationDecision",
+    "TerminationPredicate",
     "UndeclaredRegionError",
     "UnknownNotificationError",
     "UnsetRegisterError",

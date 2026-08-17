@@ -8,9 +8,20 @@ register write may still fail with a conflict, which returns to the writer
 unaudited. A rejected write returns its reason to the writer, never reaches
 the board, and is audited without a sequence number.
 
-An admitted register write also notifies every registered agent except its
-writer, through each agent's batch window. Acknowledgment, extension,
-presumed failure, and wake caps are tracked here.
+An admitted register write also notifies the registered agents, each
+through its batch window; the writer of the change, a capped agent, and
+every agent after the notification budget trips are not notified.
+Acknowledgment, extension, presumed failure, and wake caps are tracked
+here.
+
+The run closes in exactly one of four states: complete, finished with
+failures, budget exhausted, or aborted. On each transition of its three
+counters to zero together, outstanding notifications, in-flight writes,
+and open batch windows, the control component consults the application's
+termination predicate, and with none supplied it closes on that
+transition. Sequencing rechecks closure and the write budget under the
+lock, so no write lands after the closing event, and reads and the audit
+stay open on a closed run.
 
 The rule runs without the control component's lock, so two writes judged
 at the same moment are both judged against the board as it was before
@@ -104,10 +115,7 @@ class RejectionCause(Enum):
 
     ``ADMISSION``: the admission rule rejected it. ``UNDECLARED_REGION``: the
     named region was never declared. ``BUDGET_EXHAUSTED``: a run-wide budget
-    is exhausted. ``RUN_CLOSED``: the run has closed. ``BUDGET_EXHAUSTED``
-    and ``RUN_CLOSED`` cannot occur until budgets and run outcomes exist;
-    the set is closed now because a member added later breaks an exhaustive
-    match.
+    is exhausted. ``RUN_CLOSED``: the run has closed.
     """
 
     ADMISSION = "admission"
@@ -175,10 +183,14 @@ class Notification:
 class Agent:
     """An agent declaration: identity, deadline, wake cap, and delivery.
 
-    The control component invokes ``notify`` to deliver a notification, on
-    the thread that closed the batch window, holding no lock. The callback
+    The control component invokes ``notify`` to deliver a notification,
+    holding no lock, on the thread that closed the batch window or, when
+    deliveries chain, on a thread already draining them; two notifications
+    to one agent can therefore arrive on two threads at once. The callback
     may run the whole agent cycle inline or hand the notification to the
-    application's own execution.
+    application's own execution. A callback that blocks on ``wait_closed``
+    holds the run open, because its own unacknowledged notification counts
+    as outstanding work.
     """
 
     name: str
@@ -245,6 +257,92 @@ class WakeCapReached:
     agent: str
 
 
+class RunClosedError(BlackboardError):
+    """A declaration or registration reached a run that has closed."""
+
+
+class TerminationDecision(Enum):
+    """The termination predicate's answer when no work is outstanding."""
+
+    CONTINUE = "continue"
+    COMPLETE = "complete"
+
+
+TerminationPredicate: TypeAlias = Callable[["BoardReader"], TerminationDecision]
+
+
+class BudgetKind(Enum):
+    """The names of the three run-wide limits."""
+
+    WALL_CLOCK = "wall_clock"
+    TOTAL_WRITES = "total_writes"
+    TOTAL_NOTIFICATIONS = "total_notifications"
+
+
+@dataclass(frozen=True)
+class RunBudgets:
+    """The run-wide limits. Each is required and positive."""
+
+    wall_clock: timedelta
+    total_writes: int
+    total_notifications: int
+
+    def __post_init__(self) -> None:
+        if self.wall_clock <= timedelta(0):
+            raise ValueError("the wall clock budget is a positive duration")
+        if self.total_writes < 1:
+            raise ValueError("the total writes budget is at least one")
+        if self.total_notifications < 1:
+            raise ValueError("the total notifications budget is at least one")
+
+
+@dataclass(frozen=True)
+class Complete:
+    """The run closed with no agent presumed failed or capped, and the
+    termination predicate, where one was supplied, returned complete."""
+
+
+@dataclass(frozen=True)
+class FinishedWithFailures:
+    """The run closed with agents presumed failed or capped, named here."""
+
+    presumed_failed: frozenset[str]
+    capped: frozenset[str]
+
+
+@dataclass(frozen=True)
+class BudgetExhausted:
+    """The run closed because the named run-wide limit was reached."""
+
+    budget: BudgetKind
+
+
+@dataclass(frozen=True)
+class Aborted:
+    """The run closed because the application called abort."""
+
+    reason: str
+
+
+RunOutcome: TypeAlias = Complete | FinishedWithFailures | BudgetExhausted | Aborted
+
+
+@dataclass(frozen=True)
+class BudgetReached:
+    """The audit record of a run-wide limit being reached."""
+
+    at: datetime
+    budget: BudgetKind
+
+
+@dataclass(frozen=True)
+class RunClosed:
+    """The audit record of the run closing, with its outcome."""
+
+    at: datetime
+    outcome: RunOutcome
+
+
 AuditEvent: TypeAlias = (
     WriteAccepted
     | WriteRejected
@@ -253,6 +351,8 @@ AuditEvent: TypeAlias = (
     | DeadlineExtended
     | PresumedFailed
     | WakeCapReached
+    | BudgetReached
+    | RunClosed
 )
 
 _Delivery: TypeAlias = tuple[Callable[[Notification], None], Notification]
@@ -296,6 +396,8 @@ class Control:
         *,
         regions: Iterable[Level | Register] = (),
         admission_rule: AdmissionRule | None = None,
+        termination_predicate: TerminationPredicate | None = None,
+        budgets: RunBudgets,
         clock: Clock,
     ) -> None:
         self._board = Board()
@@ -316,8 +418,18 @@ class Control:
         self._next_notification_id = 1
         self._delivery_queue: deque[_Delivery] = deque()
         self._delivering = threading.local()
+        self._checking = threading.local()
+        self._termination_predicate = termination_predicate
+        self._budgets = budgets
+        self._outcome: RunOutcome | None = None
+        self._condition = threading.Condition(self._lock)
+        self._writes_used = 0
+        self._notifications_used = 0
         for region in regions:
             self.declare(region)
+        self._wall_call = clock.call_at(
+            clock.now() + budgets.wall_clock, self._wall_clock_expired
+        )
 
     @property
     def reader(self) -> BoardReader:
@@ -327,6 +439,8 @@ class Control:
     def declare(self, region: Level | Register) -> None:
         """Creates a region on the board and records its kind."""
         with self._lock:
+            if self._outcome is not None:
+                raise RunClosedError("the run has closed")
             self._board.declare(region)
             if isinstance(region, Level):
                 self._kinds[region.name] = _RegionKind.LEVEL
@@ -337,6 +451,8 @@ class Control:
     def register_agent(self, agent: Agent) -> None:
         """Registers an agent. Its cursor starts at the current sequence number."""
         with self._lock:
+            if self._outcome is not None:
+                raise RunClosedError("the run has closed")
             if agent.name in self._agents:
                 raise DuplicateAgentError(
                     f"an agent named {agent.name!r} is already registered"
@@ -355,25 +471,34 @@ class Control:
         try:
             proposed = ProposedContribution(agent=agent, level=level, content=content)
             verdict = self._admission_rule(proposed, self._board)
+            result: Accepted | Rejected
             if isinstance(verdict, Reject):
-                return self._reject(
+                result = self._reject(
                     agent, level, RejectionCause.ADMISSION, verdict.reason
                 )
-            with self._lock:
-                sequence = self._board.append(level, content)
-                self._last_sequence = sequence
-                self._audit.append(
-                    WriteAccepted(
-                        at=self._clock.now(),
-                        writer=agent,
-                        region=level,
-                        sequence=sequence,
-                    )
-                )
-            return Accepted(sequence=sequence)
+            else:
+                with self._lock:
+                    gate = self._sequencing_gate_locked(agent, level)
+                    if gate is not None:
+                        result = gate
+                    else:
+                        sequence = self._board.append(level, content)
+                        self._last_sequence = sequence
+                        self._writes_used += 1
+                        self._audit.append(
+                            WriteAccepted(
+                                at=self._clock.now(),
+                                writer=agent,
+                                region=level,
+                                sequence=sequence,
+                            )
+                        )
+                        result = Accepted(sequence=sequence)
         finally:
             with self._lock:
                 self._in_flight -= 1
+        self._check_completion()
+        return result
 
     def set_register(
         self, writer: str, register: str, value: object, expected_version: int
@@ -392,34 +517,62 @@ class Control:
                 expected_version=expected_version,
             )
             verdict = self._admission_rule(proposed, self._board)
+            deliveries: list[_Delivery] = []
+            result: Written | Conflict | Rejected
             if isinstance(verdict, Reject):
-                return self._reject(
+                result = self._reject(
                     writer, register, RejectionCause.ADMISSION, verdict.reason
                 )
-            deliveries: list[_Delivery] = []
-            with self._lock:
-                result = self._board.set(register, value, expected_version)
-                if isinstance(result, Written):
-                    self._last_sequence = result.sequence
-                    self._audit.append(
-                        WriteAccepted(
-                            at=self._clock.now(),
-                            writer=writer,
-                            region=register,
-                            sequence=result.sequence,
-                        )
-                    )
-                    deliveries = self._note_register_change(register, writer)
+            else:
+                with self._lock:
+                    gate = self._sequencing_gate_locked(writer, register)
+                    if gate is not None:
+                        result = gate
+                    else:
+                        result = self._board.set(register, value, expected_version)
+                        if isinstance(result, Written):
+                            self._last_sequence = result.sequence
+                            self._writes_used += 1
+                            self._audit.append(
+                                WriteAccepted(
+                                    at=self._clock.now(),
+                                    writer=writer,
+                                    region=register,
+                                    sequence=result.sequence,
+                                )
+                            )
+                            deliveries = self._note_register_change(register, writer)
         finally:
             with self._lock:
                 self._in_flight -= 1
         self._deliver(deliveries)
+        self._check_completion()
         return result
 
     def read_audit(self) -> list[AuditEvent]:
         """Returns every audit event in the order each occurred."""
         with self._lock:
             return list(self._audit)
+
+    def abort(self, reason: str) -> None:
+        """Closes the run as aborted. A run already closed keeps its outcome."""
+        with self._lock:
+            self._close_locked(Aborted(reason=reason))
+
+    def outcome(self) -> RunOutcome | None:
+        """Returns the closed run's outcome, or nothing while the run is open."""
+        with self._lock:
+            return self._outcome
+
+    def wait_closed(self, timeout: timedelta | None = None) -> RunOutcome | None:
+        """Blocks until the run closes and returns its outcome.
+
+        With a timeout, returns nothing when the run is still open after it.
+        """
+        with self._condition:
+            seconds = timeout.total_seconds() if timeout is not None else None
+            self._condition.wait_for(lambda: self._outcome is not None, timeout=seconds)
+            return self._outcome
 
     def ack(self, agent: str, notification_id: NotificationId) -> None:
         """Records that the agent finished responding to a notification.
@@ -446,6 +599,7 @@ class Control:
                     at=self._clock.now(), agent=agent, notification_id=notification_id
                 )
             )
+        self._check_completion()
 
     def extend(self, agent: str, notification_id: NotificationId) -> datetime | None:
         """Grants the agent a new acknowledgment deadline for a notification.
@@ -487,6 +641,8 @@ class Control:
         window = self._batch_windows[register]
         deliveries: list[_Delivery] = []
         for state in self._agents.values():
+            if self._outcome is not None:
+                break
             if state.declaration.name == writer or state.capped:
                 continue
             due = now + window
@@ -494,7 +650,9 @@ class Control:
             state.pending[register] = due if existing is None else min(existing, due)
             earliest = min(state.pending.values())
             if earliest <= now:
-                deliveries.append(self._dispatch(state, now))
+                delivery = self._dispatch(state, now)
+                if delivery is not None:
+                    deliveries.append(delivery)
             elif state.window_due is None or earliest < state.window_due:
                 if state.window_call is not None:
                     state.window_call.cancel()
@@ -506,8 +664,15 @@ class Control:
                 )
         return deliveries
 
-    def _dispatch(self, state: _AgentState, now: datetime) -> _Delivery:
-        # Callers hold self._lock.
+    def _dispatch(self, state: _AgentState, now: datetime) -> _Delivery | None:
+        # Callers hold self._lock. Returns nothing when the notification
+        # budget trips: the dispatch is withheld and the run closes.
+        if self._notifications_used >= self._budgets.total_notifications:
+            self._audit.append(
+                BudgetReached(at=now, budget=BudgetKind.TOTAL_NOTIFICATIONS)
+            )
+            self._close_locked(BudgetExhausted(budget=BudgetKind.TOTAL_NOTIFICATIONS))
+            return None
         if state.window_call is not None:
             state.window_call.cancel()
             state.window_call = None
@@ -535,6 +700,7 @@ class Control:
             to_sequence=self._last_sequence,
         )
         state.wake_count += 1
+        self._notifications_used += 1
         self._audit.append(NotificationDispatched(at=now, notification=notification))
         if state.wake_count == state.declaration.wake_cap:
             state.capped = True
@@ -548,14 +714,21 @@ class Control:
         deliveries: list[_Delivery] = []
         with self._lock:
             state = self._agents.get(agent_name)
-            if state is None or state.window_generation != generation:
+            if (
+                state is None
+                or self._outcome is not None
+                or state.window_generation != generation
+            ):
                 return
             state.window_call = None
             state.window_due = None
             state.window_generation += 1
             if state.pending and not state.capped:
-                deliveries.append(self._dispatch(state, self._clock.now()))
+                delivery = self._dispatch(state, self._clock.now())
+                if delivery is not None:
+                    deliveries.append(delivery)
         self._deliver(deliveries)
+        self._check_completion()
 
     def _deadline_passed(
         self, key: tuple[str, NotificationId], generation: int
@@ -574,6 +747,7 @@ class Control:
                     at=self._clock.now(), agent=agent, notification_id=notification_id
                 )
             )
+        self._check_completion()
 
     def _deliver(self, deliveries: list[_Delivery]) -> None:
         # One flat drain loop per thread: a callback that writes a register
@@ -599,39 +773,161 @@ class Control:
         finally:
             self._delivering.active = False
 
+    def _check_completion(self) -> None:
+        # No work is outstanding when the three counters read zero together.
+        # One flat evaluation per thread: a predicate that writes re-enters
+        # through the write's own check, which returns here and lets the
+        # outer loop re-evaluate against the moved board.
+        if getattr(self._checking, "active", False):
+            return
+        self._checking.active = True
+        try:
+            while True:
+                with self._lock:
+                    if self._outcome is not None or not self._quiescent_locked():
+                        return
+                    epoch = self._last_sequence
+                    predicate = self._termination_predicate
+                    if predicate is None:
+                        self._close_locked(self._quiescent_outcome_locked())
+                        return
+                try:
+                    decision = predicate(self._board)
+                except Exception:
+                    # The predicate is application code at the library's
+                    # boundary. Raising would reach whatever caller happened
+                    # to trigger this check; the run stays open, and the
+                    # next transition asks again.
+                    return
+                with self._lock:
+                    if self._outcome is not None:
+                        return
+                    if self._last_sequence != epoch:
+                        continue
+                    if (
+                        decision is TerminationDecision.COMPLETE
+                        and self._quiescent_locked()
+                    ):
+                        self._close_locked(self._quiescent_outcome_locked())
+                    return
+        finally:
+            self._checking.active = False
+
+    def _sequencing_gate_locked(self, writer: str, region: str) -> Rejected | None:
+        # The pre-admission checks ran without holding the lock across the
+        # admission rule, so a close or a competing writer can land between
+        # them and sequencing. This re-check under the lock is what makes
+        # the refusals race-free.
+        if self._outcome is not None:
+            return self._reject_locked(
+                writer, region, RejectionCause.RUN_CLOSED, "the run has closed"
+            )
+        if self._writes_used >= self._budgets.total_writes:
+            self._audit.append(
+                BudgetReached(at=self._clock.now(), budget=BudgetKind.TOTAL_WRITES)
+            )
+            self._close_locked(BudgetExhausted(budget=BudgetKind.TOTAL_WRITES))
+            return self._reject_locked(
+                writer,
+                region,
+                RejectionCause.BUDGET_EXHAUSTED,
+                "the total-writes budget is exhausted",
+            )
+        return None
+
+    def _quiescent_locked(self) -> bool:
+        windows_open = sum(
+            1 for state in self._agents.values() if state.window_call is not None
+        )
+        return not self._outstanding and self._in_flight == 0 and windows_open == 0
+
+    def _quiescent_outcome_locked(self) -> RunOutcome:
+        capped = frozenset(name for name, state in self._agents.items() if state.capped)
+        failed = frozenset(self._presumed_failed)
+        if failed or capped:
+            return FinishedWithFailures(presumed_failed=failed, capped=capped)
+        return Complete()
+
+    def _close_locked(self, outcome: RunOutcome) -> None:
+        if self._outcome is not None:
+            return
+        self._outcome = outcome
+        self._wall_call.cancel()
+        for state in self._agents.values():
+            if state.window_call is not None:
+                state.window_call.cancel()
+                state.window_call = None
+                state.window_due = None
+                state.window_generation += 1
+            state.pending.clear()
+        for outstanding in self._outstanding.values():
+            outstanding.deadline_call.cancel()
+        self._outstanding.clear()
+        self._audit.append(RunClosed(at=self._clock.now(), outcome=outcome))
+        self._condition.notify_all()
+
+    def _wall_clock_expired(self) -> None:
+        with self._lock:
+            if self._outcome is not None:
+                return
+            self._audit.append(
+                BudgetReached(at=self._clock.now(), budget=BudgetKind.WALL_CLOCK)
+            )
+            self._close_locked(BudgetExhausted(budget=BudgetKind.WALL_CLOCK))
+
     def _refuse_region(
         self, writer: str, region: str, expected: _RegionKind
     ) -> Rejected | None:
         with self._lock:
-            kind = self._kinds.get(region)
-        if kind is None:
-            return self._reject(
-                writer,
-                region,
-                RejectionCause.UNDECLARED_REGION,
-                f"no region is declared with the name {region!r}",
-            )
-        if kind is not expected:
-            if expected is _RegionKind.LEVEL:
-                raise RegionKindError(
-                    f"{region!r} names a register, and this operation takes a level"
+            if self._outcome is not None:
+                return self._reject_locked(
+                    writer, region, RejectionCause.RUN_CLOSED, "the run has closed"
                 )
-            raise RegionKindError(
-                f"{region!r} names a level, and this operation takes a register"
-            )
-        return None
+            kind = self._kinds.get(region)
+            if kind is None:
+                return self._reject_locked(
+                    writer,
+                    region,
+                    RejectionCause.UNDECLARED_REGION,
+                    f"no region is declared with the name {region!r}",
+                )
+            if kind is not expected:
+                if expected is _RegionKind.LEVEL:
+                    raise RegionKindError(
+                        f"{region!r} names a register, and this operation takes a level"
+                    )
+                raise RegionKindError(
+                    f"{region!r} names a level, and this operation takes a register"
+                )
+            if self._writes_used >= self._budgets.total_writes:
+                self._audit.append(
+                    BudgetReached(at=self._clock.now(), budget=BudgetKind.TOTAL_WRITES)
+                )
+                self._close_locked(BudgetExhausted(budget=BudgetKind.TOTAL_WRITES))
+                return self._reject_locked(
+                    writer,
+                    region,
+                    RejectionCause.BUDGET_EXHAUSTED,
+                    "the total-writes budget is exhausted",
+                )
+            return None
 
     def _reject(
         self, writer: str, region: str, cause: RejectionCause, reason: str
     ) -> Rejected:
         with self._lock:
-            self._audit.append(
-                WriteRejected(
-                    at=self._clock.now(),
-                    writer=writer,
-                    region=region,
-                    cause=cause,
-                    reason=reason,
-                )
+            return self._reject_locked(writer, region, cause, reason)
+
+    def _reject_locked(
+        self, writer: str, region: str, cause: RejectionCause, reason: str
+    ) -> Rejected:
+        self._audit.append(
+            WriteRejected(
+                at=self._clock.now(),
+                writer=writer,
+                region=region,
+                cause=cause,
+                reason=reason,
             )
+        )
         return Rejected(cause=cause, reason=reason)

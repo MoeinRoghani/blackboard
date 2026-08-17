@@ -21,6 +21,8 @@ from blackboard import (
     Reject,
     Rejected,
     RejectionCause,
+    RunBudgets,
+    TerminationDecision,
     WriteAccepted,
     WriteRejected,
     Written,
@@ -29,11 +31,21 @@ from blackboard._control import Control
 
 START = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
+BUDGETS = RunBudgets(
+    wall_clock=timedelta(hours=1), total_writes=10_000, total_notifications=10_000
+)
+
+
+def keep_open(reader: BoardReader) -> TerminationDecision:
+    return TerminationDecision.CONTINUE
+
 
 def make_control(rule: AdmissionRule | None = None) -> Control:
     return Control(
         regions=[Level("application"), Register("window")],
         admission_rule=rule,
+        termination_predicate=keep_open,
+        budgets=BUDGETS,
         clock=ManualClock(start=START),
     )
 
@@ -203,7 +215,11 @@ class TestAudit:
     def test_timestamps_come_from_the_injected_clock(self) -> None:
         clock = ManualClock(start=START)
         control = Control(
-            regions=[Level("application")], admission_rule=None, clock=clock
+            regions=[Level("application")],
+            admission_rule=None,
+            termination_predicate=keep_open,
+            budgets=BUDGETS,
+            clock=clock,
         )
         control.write("a", "application", "one")
         clock.advance(timedelta(seconds=90))

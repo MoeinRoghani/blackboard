@@ -6,6 +6,7 @@ import pytest
 
 from blackboard import (
     Agent,
+    BoardReader,
     Clock,
     DeadlineExtended,
     DuplicateAgentError,
@@ -17,7 +18,9 @@ from blackboard import (
     NotificationId,
     PresumedFailed,
     Register,
+    RunBudgets,
     ScheduledCall,
+    TerminationDecision,
     UnknownNotificationError,
     UnsetRegisterError,
     WakeCapReached,
@@ -27,6 +30,14 @@ from blackboard._control import Control
 
 START = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 DEADLINE = timedelta(minutes=5)
+
+BUDGETS = RunBudgets(
+    wall_clock=timedelta(hours=1), total_writes=10_000, total_notifications=10_000
+)
+
+
+def keep_open(reader: BoardReader) -> TerminationDecision:
+    return TerminationDecision.CONTINUE
 
 
 class Recorder:
@@ -56,6 +67,8 @@ def make_control(clock: ManualClock, *agents: Agent) -> Control:
             Register("namespace", batch_window=timedelta(seconds=5)),
         ],
         admission_rule=None,
+        termination_predicate=keep_open,
+        budgets=BUDGETS,
         clock=clock,
     )
     for declared in agents:
@@ -374,7 +387,11 @@ class TestStaleTimerCalls:
     def test_an_extension_survives_the_replaced_deadline_firing(self) -> None:
         clock: Clock = TimerFaithfulClock(START)
         control = Control(
-            regions=[Register("window")], admission_rule=None, clock=clock
+            regions=[Register("window")],
+            admission_rule=None,
+            termination_predicate=keep_open,
+            budgets=BUDGETS,
+            clock=clock,
         )
         recorder = Recorder()
         control.register_agent(
@@ -401,6 +418,8 @@ class TestStaleTimerCalls:
                 Register("namespace", batch_window=timedelta(seconds=5)),
             ],
             admission_rule=None,
+            termination_predicate=keep_open,
+            budgets=BUDGETS,
             clock=clock,
         )
         recorder = Recorder()
@@ -477,6 +496,8 @@ class TestChainedWakes:
         control = Control(
             regions=[Register("ra"), Register("rb")],
             admission_rule=None,
+            termination_predicate=keep_open,
+            budgets=BUDGETS,
             clock=clock,
         )
         control_holder.append(control)
