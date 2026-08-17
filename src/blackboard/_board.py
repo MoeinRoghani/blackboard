@@ -11,6 +11,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import timedelta
+
+_ZERO_WINDOW = timedelta(0)
 
 
 class BlackboardError(Exception):
@@ -42,9 +45,18 @@ class Level:
 
 @dataclass(frozen=True)
 class Register:
-    """A declaration of a region that holds one current value under a version."""
+    """A declaration of a region that holds one current value under a version.
+
+    The control component reads the batch window when a change to this
+    register lands, to schedule its notification. The board ignores it.
+    """
 
     name: str
+    batch_window: timedelta = _ZERO_WINDOW
+
+    def __post_init__(self) -> None:
+        if self.batch_window < _ZERO_WINDOW:
+            raise ValueError("a batch window is a non-negative duration")
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 # pyblackboard
 
-A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board, and the control component's write path through which an application routes writes for admission; an application adds its agents, the content they write, and its rules.
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board, and the control component's write path and notification dispatch; an application adds its agents, the content they write, and its rules.
 
 The distribution name is `pyblackboard`; the import name is `blackboard`.
 
@@ -38,6 +38,11 @@ Every public name is exported from `blackboard`; every other module is internal.
 | `Accepted`, `Rejected` | A write the control component admitted, and one it refused |
 | `RejectionCause` | The closed set of causes for a refused write |
 | `WriteAccepted`, `WriteRejected`, `AuditEvent` | The audit's records of writes that reached the board and writes that did not |
+| `Agent` | An agent declaration: name, acknowledgment deadline, wake cap, and the delivery callback |
+| `Notification`, `NotificationId` | One wake, and the identifier an acknowledgment names |
+| `NotificationDispatched`, `NotificationAcknowledged`, `DeadlineExtended`, `PresumedFailed`, `WakeCapReached` | The audit's records of dispatch, acknowledgment, extension, presumed failure, and a reached wake cap |
+| `DuplicateAgentError` | A registration named an agent that is already registered |
+| `UnknownNotificationError` | The named notification was never issued to the acknowledging agent |
 | `Clock`, `ScheduledCall` | The protocol for reading time and arming calls, and an armed call's handle |
 | `SystemClock` | The default clock, the library's only reader of the operating system clock |
 | `ManualClock` | The deterministic clock a test advances by hand |

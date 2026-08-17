@@ -1,4 +1,4 @@
-"""One injected clock reads the current instant and arms calls at later ones.
+"""One injected clock reads the current instant and arms calls at chosen ones.
 
 ``SystemClock`` is the default and the only code in the library that reads
 the operating system clock. ``ManualClock`` moves only through ``advance``,
@@ -23,7 +23,7 @@ class ScheduledCall(Protocol):
 
 
 class Clock(Protocol):
-    """Reads the current instant and arms calls to fire at later instants."""
+    """Reads the current instant and arms calls to fire at chosen instants."""
 
     def now(self) -> datetime:
         """Returns the current instant, timezone-aware in UTC."""
