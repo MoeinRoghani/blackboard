@@ -3,7 +3,7 @@ requires = ["hatchling>=1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyblackboard"
+name = "blackboardx"
 version = "0.1.0"
 description = "A skeletal blackboard system: the board and the control component, to which an application adds its agents and rules."
 readme = "README.md"
