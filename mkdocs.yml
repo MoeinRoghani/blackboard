@@ -1,7 +1,7 @@
 site_name: blackboardx
 site_description: A skeletal blackboard system for Python.
-site_url: https://moeinroghani.github.io/blackboard/
-repo_url: https://github.com/MoeinRoghani/blackboard
+site_url: https://moeinroghani.github.io/blackboardx/
+repo_url: https://github.com/MoeinRoghani/blackboardx
 copyright: Licensed under the Apache License, Version 2.0.
 
 theme:

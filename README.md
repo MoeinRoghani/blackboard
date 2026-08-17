@@ -2,7 +2,7 @@
 
 A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board and the control component; an application creates a model by supplying its regions, agents, seed, admission rule, termination predicate, and budgets.
 
-The distribution name is `blackboardx`; the import name is `blackboard`. The documentation, including the API reference, is at <https://moeinroghani.github.io/blackboard/>.
+The distribution name is `blackboardx`; the import name is `blackboard`. The documentation, including the API reference, is at <https://moeinroghani.github.io/blackboardx/>.
 
 ## Install
 
@@ -94,4 +94,4 @@ for contribution in model.reader.read_level("platform"):
 
 ## License
 
-Apache-2.0. The license text is in [LICENSE](https://github.com/MoeinRoghani/blackboard/blob/main/LICENSE), and every distribution carries it.
+Apache-2.0. The license text is in [LICENSE](https://github.com/MoeinRoghani/blackboardx/blob/main/LICENSE), and every distribution carries it.

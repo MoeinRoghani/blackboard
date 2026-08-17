@@ -53,7 +53,7 @@ The registration on PyPI, under the project's Publishing settings, is:
 | --- | --- |
 | PyPI project | `blackboardx` |
 | Owner | `MoeinRoghani` |
-| Repository | `blackboard` |
+| Repository | `blackboardx` |
 | Workflow | `publish.yml` |
 | Environment | `pypi` |
 
