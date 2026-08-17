@@ -1,0 +1,69 @@
+# pyblackboard
+
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board; an application adds its agents, the content they write, and its rules.
+
+The distribution name is `pyblackboard`; the import name is `blackboard`.
+
+## Install
+
+```
+pip install pyblackboard
+```
+
+## The board
+
+The board stores contributions in named regions under one total order, and it never reads what it stores. A region has one of two kinds. A level accumulates contributions in arrival order, and nothing stored is altered. A register holds one current value for a premise of the case; a write replaces the whole value under the version the writer read, and fails with the register's current version when another writer moved it first. One counter orders every write across all regions, so a contribution in one region stands in a definite order against a write in any other.
+
+## Public API
+
+Every public name is exported from `blackboard`; every other module is internal.
+
+| Name | Holds |
+| --- | --- |
+| `Board` | The board: `declare`, `append`, `set`, `read_level`, `read_register`, `read_board` |
+| `Level`, `Register` | The two region declarations |
+| `Written`, `Conflict` | The two outcomes of a register write |
+| `Contribution` | One unit read back from a level |
+| `RegisterState` | A register's current value and version |
+| `BoardChange` | One write to any region, as `read_board` returns it |
+| `BlackboardError` | The base of every error the library raises |
+| `UndeclaredRegionError` | An operation named a region that no declaration created |
+| `DuplicateRegionError` | A declaration named a region that already exists |
+| `RegionKindError` | An operation that takes a level named a register, or the reverse |
+| `UnsetRegisterError` | A register was read before any write gave it a value |
+
+## Example
+
+```python
+from blackboard import Board, Conflict, Level, Register, Written
+
+board = Board([Level("application"), Register("window")])
+
+# The register holds a premise: the time range under investigation.
+board.set("window", ("2026-08-16T20:00", "2026-08-16T22:00"), expected_version=0)
+
+# A level accumulates contributions; each write returns its sequence number.
+sequence = board.append("application", {"observation": "error rate rose tenfold"})
+assert sequence == 2
+
+# A register write states the version it read. The first writer wins.
+state = board.read_register("window")
+widened = board.set(
+    "window", ("2026-08-16T19:00", "2026-08-16T22:00"), expected_version=state.version
+)
+assert isinstance(widened, Written)
+
+# A second writer holding the same version fails and learns the current one.
+late = board.set(
+    "window", ("2026-08-16T18:00", "2026-08-16T22:00"), expected_version=state.version
+)
+assert late == Conflict(current_version=widened.version)
+
+# The whole record reads back in sequence order.
+for change in board.read_board():
+    print(change.sequence, change.region, change.content)
+```
+
+## License
+
+Apache-2.0. The license text is in [LICENSE](LICENSE).
