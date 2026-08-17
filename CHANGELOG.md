@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1](https://github.com/MoeinRoghani/blackboardx/compare/v0.2.0...v0.2.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ci:** reach the publish workflow when a token-created release triggers nothing ([#39](https://github.com/MoeinRoghani/blackboardx/issues/39)) ([2db8f8a](https://github.com/MoeinRoghani/blackboardx/commit/2db8f8ad4b56bc2c51f16a50931b4f49df856f55)), closes [#38](https://github.com/MoeinRoghani/blackboardx/issues/38)
+* **docs:** keep the decision records off the published site ([#51](https://github.com/MoeinRoghani/blackboardx/issues/51)) ([d8de96c](https://github.com/MoeinRoghani/blackboardx/commit/d8de96cbacf3f008f8fa376ef1bfcc7afb02ef6f)), closes [#50](https://github.com/MoeinRoghani/blackboardx/issues/50)
+* **docs:** show the site navigation on the landing page ([#49](https://github.com/MoeinRoghani/blackboardx/issues/49)) ([e31ce4a](https://github.com/MoeinRoghani/blackboardx/commit/e31ce4a9484c9193c9b1fa105c722c4604ea0051)), closes [#48](https://github.com/MoeinRoghani/blackboardx/issues/48)
+
+
+### Documentation
+
+* a documentation site built from the repository ([#43](https://github.com/MoeinRoghani/blackboardx/issues/43)) ([f106b05](https://github.com/MoeinRoghani/blackboardx/commit/f106b05c4385feccdedb014b76c3548388ce6773)), closes [#42](https://github.com/MoeinRoghani/blackboardx/issues/42)
+* the repository name in every reference to it ([#47](https://github.com/MoeinRoghani/blackboardx/issues/47)) ([d39a817](https://github.com/MoeinRoghani/blackboardx/commit/d39a8171a4d325b2c7497259cf2ccfd296fe3587)), closes [#46](https://github.com/MoeinRoghani/blackboardx/issues/46)
+
 ## [0.2.0](https://github.com/MoeinRoghani/blackboard/compare/v0.1.0...v0.2.0) (2026-08-17)
 
 
