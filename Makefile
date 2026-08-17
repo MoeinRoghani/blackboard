@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test
+.PHONY: setup lint typecheck test docs docs-serve
 
 setup:
 	uv sync --frozen
@@ -13,3 +13,9 @@ typecheck:
 
 test:
 	uv run pytest
+
+docs:
+	uv run mkdocs build --strict
+
+docs-serve:
+	uv run mkdocs serve

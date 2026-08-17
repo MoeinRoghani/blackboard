@@ -28,6 +28,9 @@ venv/
 .env
 .env.*
 
+# Generated documentation site
+site/
+
 # Tooling caches
 .pytest_cache/
 .mypy_cache/
