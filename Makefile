@@ -2,6 +2,7 @@
 
 setup:
 	uv sync --frozen
+	uv run pre-commit install
 
 lint:
 	uv run ruff format --check .
