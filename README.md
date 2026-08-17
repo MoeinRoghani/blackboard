@@ -1,6 +1,6 @@
 # pyblackboard
 
-A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board; an application adds its agents, the content they write, and its rules.
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `pyblackboard` is skeletal in that sense. It supplies the board, and the control component's write path through which an application routes writes for admission; an application adds its agents, the content they write, and its rules.
 
 The distribution name is `pyblackboard`; the import name is `blackboard`.
 
@@ -22,7 +22,7 @@ Every public name is exported from `blackboard`; every other module is internal.
 | --- | --- |
 | `Board` | The board: `declare`, `append`, `set`, `read_level`, `read_register`, `read_board` |
 | `Level`, `Register` | The two region declarations |
-| `Written`, `Conflict` | The two outcomes of a register write |
+| `Written`, `Conflict` | A register write the board sequenced, and one that named a stale version |
 | `Contribution` | One unit read back from a level |
 | `RegisterState` | A register's current value and version |
 | `BoardChange` | One write to any region, as `read_board` returns it |
@@ -31,6 +31,16 @@ Every public name is exported from `blackboard`; every other module is internal.
 | `DuplicateRegionError` | A declaration named a region that already exists |
 | `RegionKindError` | An operation that takes a level named a register, or the reverse |
 | `UnsetRegisterError` | A register was read before any write gave it a value |
+| `BoardReader` | The three read operations, as the admission rule receives them |
+| `ProposedContribution`, `ProposedRegisterWrite`, `ProposedWrite` | A write as the admission rule sees it, before sequencing |
+| `Accept`, `Reject` | The admission rule's two verdicts |
+| `AdmissionRule` | The type of the rule the application supplies |
+| `Accepted`, `Rejected` | A write the control component admitted, and one it refused |
+| `RejectionCause` | The closed set of causes for a refused write |
+| `WriteAccepted`, `WriteRejected`, `AuditEvent` | The audit's records of writes that reached the board and writes that did not |
+| `Clock`, `ScheduledCall` | The protocol for reading time and arming calls, and an armed call's handle |
+| `SystemClock` | The default clock, the library's only reader of the operating system clock |
+| `ManualClock` | The deterministic clock a test advances by hand |
 
 ## Example
 
