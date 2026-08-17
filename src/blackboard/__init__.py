@@ -1,12 +1,12 @@
 """A skeletal blackboard system.
 
 The library supplies the board, the shared structure through which
-independent agents contribute to one result, and the control component's
-write path, notification dispatch, and run closure: a write made through
-it passes admission before the board sequences it, an admitted register
-write notifies every other registered agent, and the run closes in one of
-four recorded states. The public surface is the set of names in
-``__all__``; every other name is internal.
+independent agents contribute to one result, and the control component,
+which determines which agents are notified of a change, whether a proposed
+write is admitted, whether budgets hold, and when the run has finished. An
+application creates a model by supplying its regions, agents, seed,
+admission rule, termination predicate, and budgets. The public surface is
+the set of names in ``__all__``; every other name is internal.
 """
 
 from blackboard._board import (
@@ -37,6 +37,7 @@ from blackboard._control import (
     BudgetKind,
     BudgetReached,
     Complete,
+    Control,
     DeadlineExtended,
     DuplicateAgentError,
     FinishedWithFailures,
@@ -48,6 +49,7 @@ from blackboard._control import (
     ProposedContribution,
     ProposedRegisterWrite,
     ProposedWrite,
+    RegisterSeeded,
     Reject,
     Rejected,
     RejectionCause,
@@ -55,6 +57,7 @@ from blackboard._control import (
     RunClosed,
     RunClosedError,
     RunOutcome,
+    SeedError,
     TerminationDecision,
     TerminationPredicate,
     UnknownNotificationError,
@@ -62,6 +65,7 @@ from blackboard._control import (
     WriteAccepted,
     WriteRejected,
 )
+from blackboard._model import Model, create_model
 
 __all__ = [
     "Aborted",
@@ -81,12 +85,14 @@ __all__ = [
     "Complete",
     "Conflict",
     "Contribution",
+    "Control",
     "DeadlineExtended",
     "DuplicateAgentError",
     "DuplicateRegionError",
     "FinishedWithFailures",
     "Level",
     "ManualClock",
+    "Model",
     "Notification",
     "NotificationAcknowledged",
     "NotificationDispatched",
@@ -97,6 +103,7 @@ __all__ = [
     "ProposedWrite",
     "RegionKindError",
     "Register",
+    "RegisterSeeded",
     "RegisterState",
     "Reject",
     "Rejected",
@@ -106,6 +113,7 @@ __all__ = [
     "RunClosedError",
     "RunOutcome",
     "ScheduledCall",
+    "SeedError",
     "SystemClock",
     "TerminationDecision",
     "TerminationPredicate",
@@ -116,4 +124,5 @@ __all__ = [
     "WriteAccepted",
     "WriteRejected",
     "Written",
+    "create_model",
 ]

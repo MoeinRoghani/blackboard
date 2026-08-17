@@ -1,4 +1,4 @@
-"""The control component: the write path and notification dispatch.
+"""The control component.
 
 A write made through the control component passes the application's
 admission rule before the board sequences it. The rule sees the proposed
@@ -209,6 +209,10 @@ class DuplicateAgentError(BlackboardError):
     """A registration named an agent that is already registered."""
 
 
+class SeedError(BlackboardError):
+    """The seed's names are not exactly the declared registers."""
+
+
 class UnknownNotificationError(BlackboardError):
     """The named notification was never issued to the acknowledging agent."""
 
@@ -328,6 +332,16 @@ RunOutcome: TypeAlias = Complete | FinishedWithFailures | BudgetExhausted | Abor
 
 
 @dataclass(frozen=True)
+class RegisterSeeded:
+    """The audit record of the seed writing one register when the run opened."""
+
+    at: datetime
+    register: str
+    sequence: int
+    version: int
+
+
+@dataclass(frozen=True)
 class BudgetReached:
     """The audit record of a run-wide limit being reached."""
 
@@ -344,7 +358,8 @@ class RunClosed:
 
 
 AuditEvent: TypeAlias = (
-    WriteAccepted
+    RegisterSeeded
+    | WriteAccepted
     | WriteRejected
     | NotificationDispatched
     | NotificationAcknowledged
@@ -422,6 +437,7 @@ class Control:
         self._termination_predicate = termination_predicate
         self._budgets = budgets
         self._outcome: RunOutcome | None = None
+        self._wall_call: ScheduledCall | None = None
         self._condition = threading.Condition(self._lock)
         self._writes_used = 0
         self._notifications_used = 0
@@ -648,21 +664,89 @@ class Control:
             due = now + window
             existing = state.pending.get(register)
             state.pending[register] = due if existing is None else min(existing, due)
-            earliest = min(state.pending.values())
-            if earliest <= now:
-                delivery = self._dispatch(state, now)
+            delivery = self._evaluate_dispatch_locked(state, now)
+            if delivery is not None:
+                deliveries.append(delivery)
+        return deliveries
+
+    def _evaluate_dispatch_locked(
+        self, state: _AgentState, now: datetime
+    ) -> _Delivery | None:
+        # Callers hold self._lock. Dispatches the agent's pending set when
+        # a change is due; arms or re-arms the batch window when the
+        # earliest due instant is ahead.
+        if not state.pending or state.capped:
+            return None
+        earliest = min(state.pending.values())
+        if earliest <= now:
+            return self._dispatch(state, now)
+        if state.window_due is None or earliest < state.window_due:
+            if state.window_call is not None:
+                state.window_call.cancel()
+            name = state.declaration.name
+            state.window_due = earliest
+            state.window_generation += 1
+            state.window_call = self._clock.call_at(
+                earliest, partial(self._close_window, name, state.window_generation)
+            )
+        return None
+
+    def _seed(self, seed: dict[str, object]) -> None:
+        # Called by create_model while the run opens; not a proposed write,
+        # so admission and the write budget do not apply.
+        deliveries: list[_Delivery] = []
+        with self._lock:
+            if self._outcome is not None:
+                return
+            declared = {
+                name
+                for name, kind in self._kinds.items()
+                if kind is _RegionKind.REGISTER
+            }
+            missing = declared - set(seed)
+            unknown = set(seed) - declared
+            if missing or unknown:
+                parts = []
+                if missing:
+                    parts.append(
+                        "the seed misses " + ", ".join(sorted(repr(n) for n in missing))
+                    )
+                if unknown:
+                    parts.append(
+                        "the seed names undeclared "
+                        + ", ".join(sorted(repr(n) for n in unknown))
+                    )
+                raise SeedError("; ".join(parts))
+            now = self._clock.now()
+            for register, value in seed.items():
+                result = self._board.set(register, value, expected_version=0)
+                assert isinstance(result, Written)  # a fresh register cannot conflict
+                self._last_sequence = result.sequence
+                self._audit.append(
+                    RegisterSeeded(
+                        at=now,
+                        register=register,
+                        sequence=result.sequence,
+                        version=result.version,
+                    )
+                )
+                window = self._batch_windows[register]
+                due = now + window
+                for state in self._agents.values():
+                    if state.capped:
+                        continue
+                    existing = state.pending.get(register)
+                    state.pending[register] = (
+                        due if existing is None else min(existing, due)
+                    )
+            for state in self._agents.values():
+                if self._outcome is not None:
+                    break
+                delivery = self._evaluate_dispatch_locked(state, now)
                 if delivery is not None:
                     deliveries.append(delivery)
-            elif state.window_due is None or earliest < state.window_due:
-                if state.window_call is not None:
-                    state.window_call.cancel()
-                name = state.declaration.name
-                state.window_due = earliest
-                state.window_generation += 1
-                state.window_call = self._clock.call_at(
-                    earliest, partial(self._close_window, name, state.window_generation)
-                )
-        return deliveries
+        self._deliver(deliveries)
+        self._check_completion()
 
     def _dispatch(self, state: _AgentState, now: datetime) -> _Delivery | None:
         # Callers hold self._lock. Returns nothing when the notification
@@ -852,7 +936,8 @@ class Control:
         if self._outcome is not None:
             return
         self._outcome = outcome
-        self._wall_call.cancel()
+        if self._wall_call is not None:
+            self._wall_call.cancel()
         for state in self._agents.values():
             if state.window_call is not None:
                 state.window_call.cancel()
