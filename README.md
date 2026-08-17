@@ -1,6 +1,6 @@
 # blackboardx
 
-A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board, and the control component's write path and notification dispatch; an application adds its agents, the content they write, and its rules.
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board, and the control component's write path, notification dispatch, and run closure; an application adds its agents, the content they write, and its rules.
 
 The distribution name is `blackboardx`; the import name is `blackboard`.
 
@@ -44,6 +44,11 @@ Every public name is exported from `blackboard`; every other module is internal.
 | `DuplicateAgentError` | A registration named an agent that is already registered |
 | `UnknownNotificationError` | The named notification was never issued to the acknowledging agent |
 | `Clock`, `ScheduledCall` | The protocol for reading time and arming calls, and an armed call's handle |
+| `TerminationDecision`, `TerminationPredicate` | The predicate's two answers, and the type of the predicate the application supplies |
+| `RunBudgets`, `BudgetKind` | The three run-wide limits, and their names |
+| `Complete`, `FinishedWithFailures`, `BudgetExhausted`, `Aborted`, `RunOutcome` | The four states a run closes in, and their union |
+| `BudgetReached`, `RunClosed` | The audit's records of a limit reached and of the run closing |
+| `RunClosedError` | A declaration or registration reached a run that has closed |
 | `SystemClock` | The default clock, the library's only reader of the operating system clock |
 | `ManualClock` | The deterministic clock a test advances by hand |
 
