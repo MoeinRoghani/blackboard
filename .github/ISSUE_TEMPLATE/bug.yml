@@ -1,0 +1,39 @@
+name: Bug report
+description: Behavior that disagrees with the documentation or the specification
+labels: ["type:fix"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: pyblackboard version
+      description: The installed version, from `pip show pyblackboard`
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The smallest code that shows the behavior
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What the documentation says happens
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead, with the full traceback where one exists
+    validations:
+      required: true
