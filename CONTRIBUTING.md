@@ -26,14 +26,22 @@ release-please owns the version and `CHANGELOG.md`; neither is edited by hand. M
 
 ### What merging the release pull request does
 
-The merge starts a chain that ends on PyPI, and no step of it is run by hand.
-
 1. release-please writes the new version into `pyproject.toml` and `.release-please-manifest.json`, writes the changelog entries from the squashed commit subjects, tags the commit `v<version>`, and publishes a GitHub release.
-2. Publishing that release triggers `.github/workflows/publish.yml`, which checks out the tagged commit.
+2. `.github/workflows/publish.yml` checks out the tagged commit.
 3. The workflow compares the tag against the version the package metadata declares and stops when they disagree, so a tag can never name a version other than the one it publishes.
 4. `uv build` produces the sdist and the wheel from that commit, and the workflow uploads both to PyPI.
 
 Nothing is built or uploaded from a working copy. A maintainer who runs `uv build` locally is inspecting the artifact, not releasing it.
+
+Step 2 reaches the workflow by one of two triggers, and which one depends on a GitHub rule: an event created with the default `GITHUB_TOKEN` starts no workflow run. release-please uses that token unless the repository holds a `RELEASE_PLEASE_TOKEN` secret, so by default the release it publishes triggers nothing, and the maintainer names the tag to publish:
+
+```
+gh workflow run publish.yml -f tag=v<version>
+```
+
+That dispatch runs the workflow file from the default branch and checks out the tag it names, so the uploaded artifact is built from the tagged commit either way.
+
+Adding a `RELEASE_PLEASE_TOKEN` secret, a fine-grained personal access token with contents and pull-requests write, changes both halves of that: release-please then acts as its holder rather than as the token, the release it publishes triggers `publish.yml` on its own, and CI runs on the release pull request as it does on every other pull request.
 
 ### Trusted publishing
 
