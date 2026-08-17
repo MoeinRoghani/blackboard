@@ -1,0 +1,18 @@
+name: Feature request
+description: A capability the library lacks
+labels: ["type:feat"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stops you
+    validations:
+      required: true
+  - type: textarea
+    id: surface
+    attributes:
+      label: Proposed surface
+      description: The names and calls you would expect to use, where you have a shape in mind
+    validations:
+      required: false
