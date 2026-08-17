@@ -93,6 +93,7 @@ class ProposedRegisterWrite:
 
 
 ProposedWrite: TypeAlias = ProposedContribution | ProposedRegisterWrite
+"""A proposed write of either kind, as the admission rule receives it."""
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ class Reject:
 
 
 AdmissionRule: TypeAlias = Callable[[ProposedWrite, "BoardReader"], Accept | Reject]
+"""The rule the control component calls on every proposed write."""
 
 
 class RejectionCause(Enum):
@@ -161,6 +163,7 @@ class WriteRejected:
 
 
 NotificationId = NewType("NotificationId", int)
+"""The identifier an acknowledgment or an extension names."""
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,7 @@ class TerminationDecision(Enum):
 
 
 TerminationPredicate: TypeAlias = Callable[["BoardReader"], TerminationDecision]
+"""The predicate the control component calls when no work is outstanding."""
 
 
 class BudgetKind(Enum):
@@ -329,6 +333,7 @@ class Aborted:
 
 
 RunOutcome: TypeAlias = Complete | FinishedWithFailures | BudgetExhausted | Aborted
+"""The four states a run closes in."""
 
 
 @dataclass(frozen=True)
@@ -369,6 +374,7 @@ AuditEvent: TypeAlias = (
     | BudgetReached
     | RunClosed
 )
+"""Every kind of event the audit records."""
 
 _Delivery: TypeAlias = tuple[Callable[[Notification], None], Notification]
 
