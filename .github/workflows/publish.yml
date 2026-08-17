@@ -3,6 +3,15 @@ name: publish
 on:
   release:
     types: [published]
+  # A release that release-please creates with the default token starts no
+  # workflow run. The dispatch names the tag to publish, and runs from the
+  # default branch, because a tag cut before this trigger existed carries a
+  # workflow file that cannot be dispatched.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to publish, for example v0.2.0
+        required: true
 
 permissions:
   contents: read
@@ -18,8 +27,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: check the tag names the packaged version
-        run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: test "v$(uv version --short)" = "$TAG"
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
