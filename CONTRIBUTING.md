@@ -26,7 +26,7 @@ release-please owns the version and `CHANGELOG.md`; neither is edited by hand. M
 
 ### What merging the release pull request does
 
-1. release-please writes the new version into `pyproject.toml` and `.release-please-manifest.json`, writes the changelog entries from the squashed commit subjects, tags the commit `v<version>`, and publishes a GitHub release.
+1. release-please writes the new version into `pyproject.toml` and `.release-please-manifest.json`, writes the changelog entries from the squashed commit subjects, tags the commit `v<version>`, and publishes a GitHub release. It leaves `uv.lock` recording the previous version, so the same workflow re-locks and commits it to the release branch; `uv sync --frozen` accepts a lockfile whose only difference is the project's own version, which is why `make lock-check` exists and runs in CI.
 2. `.github/workflows/publish.yml` checks out the tagged commit.
 3. The workflow compares the tag against the version the package metadata declares and stops when they disagree, so a tag can never name a version other than the one it publishes.
 4. `uv build` produces the sdist and the wheel from that commit, and the workflow uploads both to PyPI.
