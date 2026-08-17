@@ -1,6 +1,6 @@
 # blackboardx
 
-A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board, and the control component's write path, notification dispatch, and run closure; an application adds its agents, the content they write, and its rules.
+A group of agents works on one problem. Each writes what it finds into a single shared record, every agent can read all of it, and no agent calls another; the record is the only channel between them. The blackboard literature calls a system skeletal when it supplies this structure with no domain knowledge inside, so that an application system is built on it by adding knowledge and control. `blackboardx` is skeletal in that sense. It supplies the board and the control component; an application creates a model by supplying its regions, agents, seed, admission rule, termination predicate, and budgets.
 
 The distribution name is `blackboardx`; the import name is `blackboard`.
 
@@ -49,39 +49,47 @@ Every public name is exported from `blackboard`; every other module is internal.
 | `Complete`, `FinishedWithFailures`, `BudgetExhausted`, `Aborted`, `RunOutcome` | The four states a run closes in, and their union |
 | `BudgetReached`, `RunClosed` | The audit's records of a limit reached and of the run closing |
 | `RunClosedError` | A declaration or registration reached a run that has closed |
+| `Model`, `create_model` | A running model's read handle and control component, and the one creation path |
+| `Control` | The control component an application drives: writes, acknowledgment and extension, mid-run declaration and registration, abort, the audit, and the outcome |
+| `SeedError` | The seed's names are not exactly the declared registers |
+| `RegisterSeeded` | The audit's record of the seed writing one register when the run opened |
 | `SystemClock` | The default clock, the library's only reader of the operating system clock |
 | `ManualClock` | The deterministic clock a test advances by hand |
 
 ## Example
 
 ```python
-from blackboard import Board, Conflict, Level, Register, Written
+from datetime import timedelta
 
-board = Board([Level("application"), Register("window")])
+from blackboard import Agent, Complete, Level, Register, RunBudgets, create_model
 
-# The register holds a premise: the time range under investigation.
-board.set("window", ("2026-08-16T20:00", "2026-08-16T22:00"), expected_version=0)
+wakes = []
 
-# A level accumulates contributions; each write returns its sequence number.
-sequence = board.append("application", {"observation": "error rate rose tenfold"})
-assert sequence == 2
-
-# A register write states the version it read. The first writer wins.
-state = board.read_register("window")
-widened = board.set(
-    "window", ("2026-08-16T19:00", "2026-08-16T22:00"), expected_version=state.version
+model = create_model(
+    regions=[Level("platform"), Register("window")],
+    agents=[
+        Agent(
+            name="ocp",
+            acknowledgment_deadline=timedelta(minutes=5),
+            wake_cap=10,
+            notify=wakes.append,
+        )
+    ],
+    seed={"window": ("2026-08-16T20:00", "2026-08-16T22:00")},
+    budgets=RunBudgets(
+        wall_clock=timedelta(minutes=10), total_writes=100, total_notifications=100
+    ),
 )
-assert isinstance(widened, Written)
 
-# A second writer holding the same version fails and learns the current one.
-late = board.set(
-    "window", ("2026-08-16T18:00", "2026-08-16T22:00"), expected_version=state.version
-)
-assert late == Conflict(current_version=widened.version)
+# The agent's cycle: read the premises, contribute, acknowledge.
+(wake,) = wakes
+window = model.reader.read_register("window").value
+model.control.write("ocp", "platform", {"window": window, "findings": ["oom"]})
+model.control.ack("ocp", wake.notification_id)
 
-# The whole record reads back in sequence order.
-for change in board.read_board():
-    print(change.sequence, change.region, change.content)
+assert model.control.outcome() == Complete()
+for contribution in model.reader.read_level("platform"):
+    print(contribution.sequence, contribution.content)
 ```
 
 ## License
