@@ -1,10 +1,11 @@
 """A skeletal blackboard system.
 
 The library supplies the board, the shared structure through which
-independent agents contribute to one result, and the write path of the
-control component: a write made through it passes admission before the
-board sequences it. The public surface is the set of names in ``__all__``;
-every other name is internal.
+independent agents contribute to one result, and the control component's
+write path and notification dispatch: a write made through it passes
+admission before the board sequences it, and an admitted register write
+notifies every other registered agent. The public surface is the set of
+names in ``__all__``; every other name is internal.
 """
 
 from blackboard._board import (
@@ -27,14 +28,24 @@ from blackboard._control import (
     Accept,
     Accepted,
     AdmissionRule,
+    Agent,
     AuditEvent,
     BoardReader,
+    DeadlineExtended,
+    DuplicateAgentError,
+    Notification,
+    NotificationAcknowledged,
+    NotificationDispatched,
+    NotificationId,
+    PresumedFailed,
     ProposedContribution,
     ProposedRegisterWrite,
     ProposedWrite,
     Reject,
     Rejected,
     RejectionCause,
+    UnknownNotificationError,
+    WakeCapReached,
     WriteAccepted,
     WriteRejected,
 )
@@ -43,6 +54,7 @@ __all__ = [
     "Accept",
     "Accepted",
     "AdmissionRule",
+    "Agent",
     "AuditEvent",
     "BlackboardError",
     "Board",
@@ -51,9 +63,16 @@ __all__ = [
     "Clock",
     "Conflict",
     "Contribution",
+    "DeadlineExtended",
+    "DuplicateAgentError",
     "DuplicateRegionError",
     "Level",
     "ManualClock",
+    "Notification",
+    "NotificationAcknowledged",
+    "NotificationDispatched",
+    "NotificationId",
+    "PresumedFailed",
     "ProposedContribution",
     "ProposedRegisterWrite",
     "ProposedWrite",
@@ -66,7 +85,9 @@ __all__ = [
     "ScheduledCall",
     "SystemClock",
     "UndeclaredRegionError",
+    "UnknownNotificationError",
     "UnsetRegisterError",
+    "WakeCapReached",
     "WriteAccepted",
     "WriteRejected",
     "Written",
