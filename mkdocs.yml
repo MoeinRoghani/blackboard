@@ -7,8 +7,10 @@ copyright: Licensed under the Apache License, Version 2.0.
 theme:
   name: material
   features:
+    - navigation.tabs
     - navigation.sections
     - navigation.top
+    - toc.follow
     - content.code.copy
   palette:
     - media: "(prefers-color-scheme: light)"
