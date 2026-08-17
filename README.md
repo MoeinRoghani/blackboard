@@ -94,4 +94,4 @@ for contribution in model.reader.read_level("platform"):
 
 ## License
 
-Apache-2.0. The license text is in [LICENSE](LICENSE).
+Apache-2.0. The license text is in [LICENSE](https://github.com/MoeinRoghani/blackboard/blob/main/LICENSE), and every distribution carries it.
