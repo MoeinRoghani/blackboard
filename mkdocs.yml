@@ -28,13 +28,6 @@ nav:
   - Home: index.md
   - API reference: api.md
   - Contributing: contributing.md
-  - Decisions:
-      - Project scope: adr/0001-scope.md
-      - Control component and model creation: adr/0002-control-component-design.md
-      - Delivery failures and stale timers: adr/0003-delivery-and-stale-timers.md
-      - Distribution name: adr/0004-distribution-name.md
-      - Publishing to PyPI: adr/0005-publishing.md
-      - The documentation site: adr/0006-documentation-site.md
 
 plugins:
   - search
@@ -51,6 +44,10 @@ plugins:
             show_signature_annotations: true
             signature_crossrefs: true
             filters: ["!^_"]
+
+# The decision records stay in the repository and off the published site.
+exclude_docs: |
+  adr/
 
 markdown_extensions:
   - admonition
